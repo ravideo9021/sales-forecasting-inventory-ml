@@ -1,0 +1,176 @@
+# Model Hyperparameters and Tuning Configuration
+
+# SARIMA Model Parameters
+sarima_params:
+  # Grid search parameters
+  p_range: [0, 1, 2, 3]
+  d_range: [0, 1, 2]
+  q_range: [0, 1, 2, 3]
+  P_range: [0, 1, 2]
+  D_range: [0, 1]
+  Q_range: [0, 1, 2]
+  s_range: [7, 30, 365]  # Seasonal periods
+  
+  # Model selection criteria
+  selection_criterion: "aic"  # Options: aic, bic, hqic
+  
+  # Fitting parameters
+  method: "lbfgs"  # Optimization method
+  maxiter: 1000
+  disp: False
+
+# Prophet Model Parameters
+prophet_params:
+  # Changepoint parameters
+  changepoint_prior_scale: [0.001, 0.01, 0.1, 0.5]
+  changepoint_range: 0.8
+  
+  # Seasonality parameters
+  seasonality_prior_scale: [0.01, 0.1, 1.0, 10.0]
+  yearly_seasonality: [True, False, 10, 20]
+  weekly_seasonality: [True, False, 3, 5]
+  daily_seasonality: [True, False]
+  
+  # Holiday parameters
+  holidays_prior_scale: [0.01, 0.1, 1.0, 10.0]
+  
+  # Other parameters
+  seasonality_mode: ["additive", "multiplicative"]
+  interval_width: 0.95
+
+# XGBoost Model Parameters
+xgboost_params:
+  # Core parameters
+  n_estimators: [500, 1000, 1500, 2000]
+  max_depth: [3, 4, 5, 6, 7, 8]
+  learning_rate: [0.01, 0.05, 0.1, 0.15, 0.2]
+  
+  # Sampling parameters
+  subsample: [0.6, 0.7, 0.8, 0.9, 1.0]
+  colsample_bytree: [0.6, 0.7, 0.8, 0.9, 1.0]
+  colsample_bylevel: [0.6, 0.7, 0.8, 0.9, 1.0]
+  
+  # Regularization parameters
+  reg_alpha: [0, 0.1, 0.5, 1.0, 2.0]
+  reg_lambda: [0, 0.1, 0.5, 1.0, 2.0]
+  
+  # Other parameters
+  min_child_weight: [1, 3, 5, 7]
+  gamma: [0, 0.1, 0.2, 0.3, 0.4]
+  random_state: 42
+
+# LSTM Model Parameters
+lstm_params:
+  # Architecture parameters
+  sequence_length: [7, 14, 21, 30, 60]
+  hidden_units: [32, 64, 128, 256]
+  num_layers: [1, 2, 3]
+  dropout_rate: [0.1, 0.2, 0.3, 0.4, 0.5]
+  
+  # Training parameters
+  batch_size: [16, 32, 64, 128]
+  learning_rate: [0.001, 0.01, 0.1]
+  epochs: [50, 100, 200]
+  
+  # Optimization parameters
+  optimizer: ["adam", "rmsprop", "sgd"]
+  loss_function: ["mse", "mae", "huber"]
+  
+  # Regularization
+  l1_regularization: [0.0, 0.01, 0.1]
+  l2_regularization: [0.0, 0.01, 0.1]
+
+# LightGBM Model Parameters
+lightgbm_params:
+  # Core parameters
+  n_estimators: [500, 1000, 1500, 2000]
+  max_depth: [3, 4, 5, 6, 7, 8, -1]
+  learning_rate: [0.01, 0.05, 0.1, 0.15, 0.2]
+  
+  # Sampling parameters
+  subsample: [0.6, 0.7, 0.8, 0.9, 1.0]
+  colsample_bytree: [0.6, 0.7, 0.8, 0.9, 1.0]
+  
+  # Regularization parameters
+  reg_alpha: [0, 0.1, 0.5, 1.0, 2.0]
+  reg_lambda: [0, 0.1, 0.5, 1.0, 2.0]
+  
+  # Other parameters
+  min_child_samples: [10, 20, 30, 50]
+  num_leaves: [31, 50, 100, 200]
+  random_state: 42
+
+# CatBoost Model Parameters
+catboost_params:
+  # Core parameters
+  iterations: [500, 1000, 1500, 2000]
+  depth: [3, 4, 5, 6, 7, 8, 10]
+  learning_rate: [0.01, 0.05, 0.1, 0.15, 0.2]
+  
+  # Sampling parameters
+  subsample: [0.6, 0.7, 0.8, 0.9, 1.0]
+  
+  # Regularization parameters
+  l2_leaf_reg: [1, 3, 5, 7, 9]
+  
+  # Other parameters
+  min_data_in_leaf: [1, 5, 10, 20]
+  random_state: 42
+
+# Ensemble Model Parameters
+ensemble_params:
+  # Weighted averaging
+  weighted_average:
+    weight_method: ["equal", "performance", "inverse_variance"]
+    min_weight: 0.1
+    max_weight: 0.8
+    
+  # Stacking parameters
+  stacking:
+    meta_learner: ["linear", "ridge", "lasso", "elastic_net", "random_forest", "xgboost"]
+    cv_folds: [3, 5, 10]
+    use_probas: [True, False]
+    
+  # Blending parameters
+  blending:
+    holdout_size: [0.1, 0.2, 0.3]
+    validation_split: [0.1, 0.2, 0.3]
+
+# Hyperparameter Tuning Configuration
+tuning_config:
+  # Optuna settings
+  optuna:
+    n_trials: 100
+    timeout: 3600  # 1 hour
+    n_jobs: -1
+    study_name: "sales_forecasting_optimization"
+    
+  # Grid search settings
+  grid_search:
+    cv: 5
+    scoring: "neg_mean_absolute_percentage_error"
+    n_jobs: -1
+    
+  # Random search settings
+  random_search:
+    n_iter: 50
+    cv: 5
+    scoring: "neg_mean_absolute_percentage_error"
+    n_jobs: -1
+
+# Model Selection Configuration
+model_selection:
+  # Cross-validation strategy
+  cv_strategy: "time_series_split"  # Options: kfold, time_series_split, walk_forward
+  
+  # Evaluation metrics
+  primary_metric: "wmape"  # Weighted Mean Absolute Percentage Error
+  secondary_metrics: ["mape", "rmse", "mae", "smape"]
+  
+  # Selection criteria
+  selection_criterion: "min_wmape"  # Options: min_wmape, min_mape, min_rmse
+  
+  # Model persistence
+  save_best_model: True
+  save_all_models: False
+  model_format: "joblib"  # Options: joblib, pickle, onnx 

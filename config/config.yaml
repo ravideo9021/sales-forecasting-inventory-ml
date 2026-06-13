@@ -1,0 +1,167 @@
+# Sales Forecasting & Inventory Optimization ML Project Configuration
+
+# Data Configuration
+data:
+  raw_data_path: "data/raw/"
+  processed_data_path: "data/processed/"
+  external_data_path: "data/external/"
+  synthetic_data_path: "data/synthetic/"
+  
+  # Dataset files
+  train_file: "train.csv"
+  test_file: "test.csv"
+  stores_file: "stores.csv"
+  oil_file: "oil.csv"
+  holidays_file: "holidays_events.csv"
+  transactions_file: "transactions.csv"
+  
+  # Data processing settings
+  date_column: "date"
+  target_column: "sales"
+  store_column: "store_nbr"
+  family_column: "family"
+  
+  # Feature engineering
+  lag_features: [1, 7, 14, 30, 91, 365]
+  rolling_windows: [7, 30, 90]
+  seasonal_periods: [7, 30, 365]
+
+# Model Configuration
+models:
+  # SARIMA parameters
+  sarima:
+    max_p: 3
+    max_d: 2
+    max_q: 3
+    max_P: 2
+    max_D: 1
+    max_Q: 2
+    seasonal_period: 7
+    
+  # Prophet parameters
+  prophet:
+    changepoint_prior_scale: 0.05
+    seasonality_prior_scale: 10.0
+    holidays_prior_scale: 10.0
+    seasonality_mode: "multiplicative"
+    
+  # XGBoost parameters
+  xgboost:
+    n_estimators: 1000
+    max_depth: 6
+    learning_rate: 0.1
+    subsample: 0.8
+    colsample_bytree: 0.8
+    random_state: 42
+    
+  # LSTM parameters
+  lstm:
+    sequence_length: 30
+    hidden_units: 128
+    dropout_rate: 0.2
+    epochs: 100
+    batch_size: 32
+    validation_split: 0.2
+    
+  # Ensemble parameters
+  ensemble:
+    methods: ["weighted_average", "stacking"]
+    meta_learner: "linear"
+    cv_folds: 5
+
+# Optimization Configuration
+optimization:
+  # Safety stock parameters
+  safety_stock:
+    default_service_level: 0.95
+    lead_time_days: 14
+    review_period_days: 7
+    
+  # EOQ parameters
+  eoq:
+    holding_cost_rate: 0.25
+    ordering_cost: 50.0
+    annual_demand_factor: 365
+    
+  # ABC classification
+  abc_classification:
+    a_threshold: 0.8
+    b_threshold: 0.95
+    c_threshold: 1.0
+
+# Evaluation Configuration
+evaluation:
+  # Cross-validation
+  cv_folds: 5
+  test_size: 0.2
+  validation_size: 0.2
+  
+  # Metrics
+  metrics: ["mape", "wmape", "rmse", "mae", "smape"]
+  
+  # Time series validation
+  time_series_cv:
+    n_splits: 5
+    test_size: 30
+    
+  # Statistical tests
+  statistical_tests:
+    - "ljung_box"
+    - "augmented_dickey_fuller"
+    - "jarque_bera"
+
+# Dashboard Configuration
+dashboard:
+  # Streamlit settings
+  page_title: "Sales Forecasting & Inventory Optimization"
+  page_icon: "📊"
+  layout: "wide"
+  
+  # Chart settings
+  chart_height: 600
+  chart_width: 800
+  
+  # Color scheme
+  colors:
+    primary: "#1f77b4"
+    secondary: "#ff7f0e"
+    success: "#2ca02c"
+    warning: "#d62728"
+    info: "#9467bd"
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/app.log"
+  max_bytes: 10485760  # 10MB
+  backup_count: 5
+
+# Performance Configuration
+performance:
+  # Model training
+  max_training_time: 1800  # 30 minutes
+  parallel_jobs: -1  # Use all available cores
+  
+  # Prediction
+  max_prediction_time: 1  # 1 second
+  batch_size: 1000
+  
+  # Memory management
+  max_memory_usage: 0.8  # 80% of available memory
+
+# Business Configuration
+business:
+  # Financial parameters
+  cost_of_capital: 0.12
+  storage_cost_rate: 0.25
+  stockout_cost_multiplier: 3.0
+  
+  # Service levels
+  target_service_level: 0.95
+  critical_service_level: 0.99
+  
+  # Performance targets
+  target_mape: 0.15
+  target_wmape: 0.12
+  target_inventory_turns: 8.0 

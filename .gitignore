@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Large data — exceeds GitHub's 100MB limit and free-host RAM.
+# The dashboard auto-falls back to synthetic demo data when these are absent.
+data/raw/
+data/processed/
+data/external/
+data/synthetic/
+*.zip
+
+# Logs & OS
+logs/
+*.log
+.DS_Store
+
+# Secrets / env
+.env
+.streamlit/secrets.toml
