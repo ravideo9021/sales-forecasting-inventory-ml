@@ -2,6 +2,10 @@
 
 > A production-grade machine learning pipeline that forecasts retail sales and translates those forecasts directly into actionable inventory decisions — all surfaced through a live interactive dashboard.
 
+**🚀 Live demo → [sales-forecasting-inventory.streamlit.app](https://sales-forecasting-inventory.streamlit.app/)**
+
+The hosted demo runs on synthetic data generated at startup (the 1.7 GB training dataset is too large for free hosting), so every page is fully interactive without any setup.
+
 ---
 
 ## Table of Contents
