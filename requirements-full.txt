@@ -9,7 +9,13 @@ numpy>=1.24
 scipy>=1.10
 scikit-learn>=1.1
 xgboost>=2.0
+lightgbm>=4.0          # second base learner for the XGBoost+LightGBM ensemble
 statsmodels>=0.13
+
+# Optional foundation-model baseline (Amazon Chronos) — NOT installed by default
+# (torch is heavy). Enable with:  pip install chronos-forecasting torch
+# chronos-forecasting>=1.4
+# torch>=2.2
 
 # Optimization & hyperparameter tuning
 pulp>=2.6

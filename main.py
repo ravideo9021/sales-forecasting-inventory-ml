@@ -410,13 +410,46 @@ class SalesForecastingPipeline:
             )
             
             self.models['xgboost'] = xgb_model
-            
+
+            # LightGBM second base learner + averaging ensemble (Path-A SOTA upgrade).
+            # Guarded so a missing optional dependency never breaks training.
+            try:
+                from src.models.lightgbm_model import LightGBMModel
+                from src.models.ensemble import EnsembleForecaster
+                lgb_model = LightGBMModel(self.config)
+                lgb_model.fit(X_train, y_train, validation_data=(X_val, y_val))
+                self.models['lightgbm'] = lgb_model
+                self.models['ensemble'] = EnsembleForecaster(
+                    {'xgboost': xgb_model, 'lightgbm': lgb_model})
+                logger.info("LightGBM + XGBoost ensemble ready")
+            except Exception as e:
+                logger.warning(f"LightGBM/ensemble step skipped: {e}")
+
+            # Rolling-origin backtest — honest multi-cutoff error estimate.
+            try:
+                import xgboost as _xgb
+                from src.evaluation.backtest import rolling_origin_backtest
+                horizon = int(self.config.get('evaluation', {})
+                              .get('time_series_cv', {}).get('test_size', 30))
+                factory = lambda: _xgb.XGBRegressor(
+                    objective='reg:tweedie', tweedie_variance_power=1.2,
+                    n_estimators=400, max_depth=6, learning_rate=0.1,
+                    subsample=0.8, colsample_bytree=0.8, random_state=42)
+                bt = rolling_origin_backtest(factory, X, y, features_data[date_col],
+                                             n_splits=5, horizon=horizon)
+                if not bt.empty:
+                    Path("reports").mkdir(exist_ok=True)
+                    bt.to_csv("reports/backtest_xgboost.csv", index=False)
+                    logger.info(f"Backtest saved → reports/backtest_xgboost.csv\n{bt}")
+            except Exception as e:
+                logger.warning(f"Rolling backtest skipped: {e}")
+
             # Save trained models
             models_path = Path("models")
             models_path.mkdir(exist_ok=True)
-            
+
             xgb_model.save_model("models/xgboost_model.joblib")
-            
+
             logger.info("Model training completed successfully")
             return self.models
             
@@ -476,15 +509,18 @@ class SalesForecastingPipeline:
             X_test = test_features.reindex(columns=feature_columns, fill_value=0)
 
             if 'xgboost' in self.models:
-                logger.info("Generating XGBoost forecasts...")
-                xgb_predictions = self.models['xgboost'].predict(X_test)
+                # Prefer the ensemble (XGBoost + LightGBM) when available.
+                fc_model_name = 'ensemble' if 'ensemble' in self.models else 'xgboost'
+                fc_model = self.models[fc_model_name]
+                logger.info(f"Generating forecasts with: {fc_model_name}")
+                xgb_predictions = fc_model.predict(X_test)
 
                 forecast_df = test_data.copy()
                 forecast_df['forecast'] = xgb_predictions
-                forecast_df['model'] = 'xgboost'
+                forecast_df['model'] = fc_model_name
 
                 # Probabilistic interval (P10/P90) from the quantile models
-                quantiles = self.models['xgboost'].predict_quantiles(X_test)
+                quantiles = fc_model.predict_quantiles(X_test)
                 if quantiles is not None:
                     forecast_df['forecast_lo'] = quantiles['lo']
                     forecast_df['forecast_hi'] = quantiles['hi']

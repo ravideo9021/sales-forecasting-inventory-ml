@@ -201,6 +201,12 @@ colsample_bytree: 0.8
 - **Tweedie objective** (`reg:tweedie`, `variance_power=1.2`) is the default instead of plain L2/RMSE. Retail sales are right-skewed and zero-inflated; Tweedie models that distribution directly (the same choice the M5-competition winners made). Override via `config['models']['xgboost']['objective']`.
 - **Quantile regression** trains P10 / P50 / P90 models with XGBoost's native pinball loss (`reg:quantileerror`). This produces honest, *asymmetric* prediction intervals — surfaced as the P10–P90 band on the Forecasting page — replacing the old heuristic ±10% band. Access via `model.predict_quantiles(X)`; the pipeline writes `forecast_lo` / `forecast_hi` columns to `forecasts_xgboost.csv`.
 
+### Ensemble, Backtesting & Foundation-Model Baseline
+Upgrades that move the pipeline from "solid GBM" toward competition-grade:
+- **LightGBM second learner + averaging ensemble** (`src/models/lightgbm_model.py`, `src/models/ensemble.py`). LightGBM (same Tweedie + quantile setup) is trained alongside XGBoost; the `EnsembleForecaster` averages their point forecasts and quantiles. Ensembling diverse-but-comparable GBMs is the cheapest reliable accuracy gain on tabular retail data. `generate_forecasts()` uses the ensemble automatically when available.
+- **Rolling-origin backtest** (`src/evaluation/backtest.py`). Instead of a single 80/20 split, the approach is re-trained at several chronological cutoffs and scored on the next *N* days at each — an honest mean ± variance error estimate. Written to `reports/backtest_xgboost.csv` during training.
+- **Foundation-model baseline (Amazon Chronos)** (`src/models/foundation_baseline.py`) — *optional*, import-guarded, zero-shot probabilistic forecasting as a "different method" benchmark/ensemble member. Heavy deps (`torch`, `chronos-forecasting`) are **not** installed by default; enable with `pip install chronos-forecasting torch`.
+
 ---
 
 ## Inventory Optimization Engine
@@ -379,7 +385,7 @@ Coverage:
 
 ### Why These Choices?
 
-**XGBoost over LightGBM or CatBoost:** Best-documented behavior for tabular time series regression; most widely deployed in production retail forecasting. Performance difference between the three is marginal; XGBoost's stability and ecosystem maturity win.
+**XGBoost as the primary learner, LightGBM as the ensemble partner:** Both are best-in-class for tabular time-series regression and dominate retail-forecasting competitions (M5, Favorita). Their errors are decorrelated enough that averaging the two beats either alone, so the pipeline trains both and ensembles them rather than picking just one. (CatBoost would be a fine third member.)
 
 **Streamlit over Dash:** Requires ~3× less code for equivalent dashboards and handles state management automatically. Dash offers more customization but at significant complexity cost.
 
