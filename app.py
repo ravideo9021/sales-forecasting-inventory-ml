@@ -222,6 +222,18 @@ header[data-testid="stHeader"] {{ background:transparent !important; box-shadow:
 [data-testid="stSidebarCollapseButton"] svg, [data-testid="stSidebarCollapseButton"] * {{
     color:{C['text']} !important; fill:{C['text']} !important;
 }}
+
+/* The sidebar-opener is a components.html iframe; Streamlit renders it ~150px
+   tall by default, which created a large empty block at the top of the page.
+   Pull it out of the layout flow (0x0, absolute) so it takes NO space — but
+   keep it rendered (not display:none) so its JS keeps running. */
+[data-testid="stElementContainer"]:has(> [data-testid="stIFrame"]) {{
+    position:absolute !important; top:0 !important; left:0 !important;
+    width:0 !important; height:0 !important; min-height:0 !important;
+    margin:0 !important; padding:0 !important; overflow:hidden !important;
+    pointer-events:none !important;
+}}
+[data-testid="stIFrame"] {{ height:0 !important; min-height:0 !important; }}
 </style>
 """, unsafe_allow_html=True)
 
