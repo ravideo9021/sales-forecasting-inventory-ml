@@ -42,7 +42,11 @@ class XGBoostModel(BaseModel):
         self.best_params = None
         self.feature_importance_df = None
         self.study = None
-        
+
+        # Probabilistic forecasting (quantile regression)
+        self.quantiles = [0.1, 0.5, 0.9]
+        self.quantile_model = None
+
         logger.info("XGBoost model initialized")
     
     def fit(self, X: pd.DataFrame, y: pd.Series, 
@@ -96,6 +100,16 @@ class XGBoostModel(BaseModel):
             X_val_processed = self.prepare_features(X_val)
             eval_set = [(X_val_processed.values, y_val.values)]
         
+        # Objective: default to Tweedie. Retail sales are right-skewed and
+        # zero-inflated, which plain L2/RMSE handles poorly; Tweedie (used by the
+        # M5 winners) models that distribution directly. Override via
+        # config['models']['xgboost']['objective'].
+        self.best_params.setdefault('objective', self.xgb_config.get('objective', 'reg:tweedie'))
+        if 'tweedie' in str(self.best_params['objective']):
+            self.best_params.setdefault(
+                'tweedie_variance_power',
+                self.xgb_config.get('tweedie_variance_power', 1.2))
+
         # Train the model with best parameters
         self.model = xgb.XGBRegressor(
             **self.best_params,
@@ -129,10 +143,55 @@ class XGBoostModel(BaseModel):
         
         # Calculate feature importance
         self.feature_importance_df = self._calculate_feature_importance()
+
+        # Probabilistic intervals via quantile regression (pinball loss)
+        self._fit_quantile_model(X_array, y_array)
+
         logger.info("XGBoost model training completed")
         logger.info(f"Training WMAPE: {self.training_metrics.get('wmape', 'N/A'):.4f}")
-        
+
         return self
+
+    def _fit_quantile_model(self, X_array: np.ndarray, y_array: np.ndarray) -> None:
+        """Train a single multi-quantile model (P10/P50/P90) for prediction intervals.
+
+        Uses XGBoost's native quantile objective (pinball loss). This replaces the
+        old heuristic ±10% band with honest, asymmetric, demand-aware uncertainty.
+        """
+        bp = self.best_params or {}
+        try:
+            self.quantile_model = xgb.XGBRegressor(
+                objective='reg:quantileerror',
+                quantile_alpha=np.array(self.quantiles),
+                n_estimators=int(bp.get('n_estimators', 500)),
+                max_depth=int(bp.get('max_depth', 6)),
+                learning_rate=float(bp.get('learning_rate', 0.1)),
+                subsample=float(bp.get('subsample', 0.8)),
+                colsample_bytree=float(bp.get('colsample_bytree', 0.8)),
+                random_state=int(bp.get('random_state', 42)),
+            )
+            self.quantile_model.fit(X_array, y_array)
+            logger.info(f"Quantile models trained for {self.quantiles}")
+        except Exception as e:  # quantile objective unavailable on older XGBoost
+            logger.warning(f"Quantile model training skipped: {e}")
+            self.quantile_model = None
+
+    def predict_quantiles(self, X: pd.DataFrame) -> Optional[Dict[str, np.ndarray]]:
+        """Return {'lo','median','hi'} arrays (P10/P50/P90), or None if unavailable."""
+        if getattr(self, 'quantile_model', None) is None:
+            return None
+        self.validate_data(X)
+        X_processed = self.prepare_features(X)
+        if self.feature_names is not None:
+            for feature in set(self.feature_names) - set(X_processed.columns):
+                X_processed[feature] = 0
+            X_processed = X_processed[self.feature_names]
+        q = np.maximum(self.quantile_model.predict(X_processed.values), 0)
+        if q.ndim == 1:  # single-quantile fallback
+            return {'lo': q, 'median': q, 'hi': q}
+        # Enforce monotonic ordering across quantiles (guards rare crossings)
+        q = np.sort(q, axis=1)
+        return {'lo': q[:, 0], 'median': q[:, 1], 'hi': q[:, 2]}
     
     def predict(self, X: pd.DataFrame, **kwargs) -> np.ndarray:
         """

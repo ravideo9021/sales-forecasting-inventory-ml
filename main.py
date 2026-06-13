@@ -483,6 +483,13 @@ class SalesForecastingPipeline:
                 forecast_df['forecast'] = xgb_predictions
                 forecast_df['model'] = 'xgboost'
 
+                # Probabilistic interval (P10/P90) from the quantile models
+                quantiles = self.models['xgboost'].predict_quantiles(X_test)
+                if quantiles is not None:
+                    forecast_df['forecast_lo'] = quantiles['lo']
+                    forecast_df['forecast_hi'] = quantiles['hi']
+                    logger.info("Added P10/P90 quantile bounds to forecasts")
+
                 self.forecasts['xgboost'] = forecast_df
                 forecast_df.to_csv('data/processed/forecasts_xgboost.csv', index=False)
                 logger.info(f"Generated {len(forecast_df)} forecasts")

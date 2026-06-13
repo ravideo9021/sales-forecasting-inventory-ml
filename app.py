@@ -210,13 +210,28 @@ label, .stSlider label, .stNumberInput label {{ color:{C['muted']} !important; f
 .logo-txt span {{ color:{C['accent2']}; }}
 .nav-label {{ font-size:0.66rem; letter-spacing:0.12em; text-transform:uppercase; color:{C['faint']}; font-weight:700; padding:0.9rem 0.4rem 0.35rem 0.4rem; }}
 
-/* hide the menu/toolbar/decoration but KEEP the header so the sidebar
-   collapse/expand control stays reachable */
+/* hide menu/toolbar/decoration but KEEP the header */
 #MainMenu, footer {{ visibility:hidden; }}
 [data-testid="stToolbar"], [data-testid="stDecoration"], [data-testid="stStatusWidget"] {{ display:none !important; }}
 header[data-testid="stHeader"] {{ background:transparent !important; box-shadow:none !important; }}
-[data-testid="stSidebarCollapsedControl"], [data-testid="stSidebarCollapseButton"],
-[data-testid="stExpandSidebarButton"], [data-testid="collapsedControl"] {{ visibility:visible !important; }}
+
+/* ── Sidebar open/close controls (Streamlit 1.4x: stExpandSidebarButton /
+   stSidebarCollapseButton). Pin the REOPEN button as a fixed, high-z-index,
+   clearly-styled chip so it can never be overlapped by content or blend into
+   the dark background — this is the control that previously "disappeared". */
+[data-testid="stExpandSidebarButton"], [data-testid="stSidebarCollapseButton"] {{
+    visibility:visible !important; opacity:1 !important; display:inline-flex !important;
+}}
+[data-testid="stExpandSidebarButton"] {{
+    position:fixed !important; top:0.7rem !important; left:0.7rem !important; z-index:1000000 !important;
+    background:{C['surface2']} !important; border:1px solid {C['border_hi']} !important;
+    border-radius:9px !important; padding:6px !important; box-shadow:0 2px 10px rgba(0,0,0,0.4) !important;
+}}
+[data-testid="stExpandSidebarButton"]:hover {{ border-color:{C['accent']} !important; }}
+[data-testid="stExpandSidebarButton"] svg, [data-testid="stExpandSidebarButton"] *,
+[data-testid="stSidebarCollapseButton"] svg, [data-testid="stSidebarCollapseButton"] * {{
+    color:{C['text']} !important; fill:{C['text']} !important; opacity:1 !important;
+}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -457,13 +472,21 @@ class RetailIQDashboard:
 
         f_dates = pd.date_range('2024-01-01', periods=30, freq='D')
         f_rows = []
-        for d in f_dates:
+        nd = len(f_dates)
+        for h, d in enumerate(f_dates):
             seasonal = 1 + 0.3 * np.sin(2 * np.pi * d.dayofyear / 365)
+            # Quantile-style band that widens with the horizon and is asymmetric
+            # (right-skewed), mirroring real q10/q90 regression output.
+            w = 0.08 + 0.13 * (h / max(nd - 1, 1))
             for s in stores:
                 for f in families:
                     base = rng.gamma(4, 50)
+                    pt = max(0.0, base * seasonal + rng.normal(0, base * 0.05))
                     f_rows.append({'date': d, 'store_nbr': s, 'family': f,
-                                   'forecast': max(0, base * seasonal + rng.normal(0, base * 0.05)), 'model': 'xgboost'})
+                                   'forecast': pt,
+                                   'forecast_lo': max(0.0, pt * (1 - w)),
+                                   'forecast_hi': pt * (1 + w * 1.45),
+                                   'model': 'xgboost'})
         return {'sales': sales_df, 'inventory': inv_df, 'forecasts': pd.DataFrame(f_rows)}
 
     def _load_all(self) -> Dict[str, pd.DataFrame]:
@@ -804,12 +827,22 @@ class RetailIQDashboard:
             col.markdown(c, unsafe_allow_html=True)
 
         st.markdown('<div style="height:1.4rem"></div>', unsafe_allow_html=True)
-        section('Forecast vs history · 90% confidence interval')
+        has_q = 'forecast_lo' in fc.columns and 'forecast_hi' in fc.columns
+        section('Forecast vs history · ' + ('P10–P90 quantile band' if has_q else 'uncertainty band'))
         if not fc.empty and 'forecast' in fc.columns:
-            d = fc.groupby('date')['forecast'].sum().reset_index()
-            unc = d['forecast'] * 0.10
-            d['hi'] = d['forecast'] + 1.645 * unc
-            d['lo'] = (d['forecast'] - 1.645 * unc).clip(lower=0)
+            agg = {'forecast': 'sum'}
+            if has_q:
+                agg.update(forecast_lo='sum', forecast_hi='sum')
+            d = fc.groupby('date').agg(agg).reset_index()
+            if has_q:
+                # Real quantile-regression bounds (pinball loss) — asymmetric, honest.
+                d['lo'], d['hi'], band_name = d['forecast_lo'].clip(lower=0), d['forecast_hi'], 'P10–P90'
+            else:
+                # Fallback when the forecast file has no quantile columns.
+                unc = d['forecast'] * 0.10
+                d['hi'] = d['forecast'] + 1.645 * unc
+                d['lo'] = (d['forecast'] - 1.645 * unc).clip(lower=0)
+                band_name = '±10% (heuristic)'
             fig = go.Figure()
             if not sales.empty:
                 h = sales.groupby('date')['sales'].sum().reset_index().sort_values('date').tail(60)
@@ -818,10 +851,12 @@ class RetailIQDashboard:
             fig.add_trace(go.Scatter(x=pd.concat([d['date'], d['date'][::-1]]),
                                      y=pd.concat([d['hi'], d['lo'][::-1]]), fill='toself',
                                      fillcolor='rgba(167,139,250,0.13)', line=dict(width=0),
-                                     name='90% CI', hoverinfo='skip'))
-            fig.add_trace(go.Scatter(x=d['date'], y=d['forecast'], mode='lines', name='Forecast',
+                                     name=band_name, hoverinfo='skip'))
+            fig.add_trace(go.Scatter(x=d['date'], y=d['forecast'], mode='lines', name='Forecast (P50)' if has_q else 'Forecast',
                                      line=dict(color=C['violet'], width=2.5, dash='dash')))
             st.plotly_chart(theme(fig, 350), use_container_width=True, config={'displayModeBar': False})
+            st.caption('Quantile-regression P10/P90 bounds (pinball loss) — asymmetric, demand-aware uncertainty.'
+                       if has_q else 'Heuristic ±10% band — no quantile columns found in the forecast data.')
 
         st.markdown('<div style="height:0.6rem"></div>', unsafe_allow_html=True)
         t1, t2, t3 = st.tabs(['By family', 'By store', 'Feature importance'])

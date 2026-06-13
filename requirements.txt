@@ -2,10 +2,13 @@
 # This is what Streamlit Community Cloud / Hugging Face Spaces installs.
 # For the full ML pipeline (training, optimization, experiments) see requirements-full.txt.
 
-streamlit>=1.40
+# streamlit pinned: the sidebar reopen-control CSS targets test IDs from this
+# exact frontend (stExpandSidebarButton). A newer release could rename them and
+# silently break the toggle, so pin to the verified version.
+streamlit==1.49.1
 pandas>=2.0
 numpy>=1.24
-plotly>=6.0
+plotly>=6.0,<7
 scipy>=1.10
 pyyaml>=6.0
 joblib>=1.3

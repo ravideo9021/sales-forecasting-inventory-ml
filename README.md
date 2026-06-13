@@ -197,6 +197,10 @@ colsample_bytree: 0.8
 - No hyperparameter tuning by default (set `tune_hyperparameters=True` to enable Optuna search)
 - Model persisted via `joblib` to `models/xgboost_model.joblib`
 
+### Objective & Probabilistic Forecasting
+- **Tweedie objective** (`reg:tweedie`, `variance_power=1.2`) is the default instead of plain L2/RMSE. Retail sales are right-skewed and zero-inflated; Tweedie models that distribution directly (the same choice the M5-competition winners made). Override via `config['models']['xgboost']['objective']`.
+- **Quantile regression** trains P10 / P50 / P90 models with XGBoost's native pinball loss (`reg:quantileerror`). This produces honest, *asymmetric* prediction intervals — surfaced as the P10–P90 band on the Forecasting page — replacing the old heuristic ±10% band. Access via `model.predict_quantiles(X)`; the pipeline writes `forecast_lo` / `forecast_hi` columns to `forecasts_xgboost.csv`.
+
 ---
 
 ## Inventory Optimization Engine
@@ -261,7 +265,7 @@ Data loading is column-pruned: the sales feature table (`features_engineered.csv
 
 ### 3. 🔮 Forecasting
 - Live model metrics row (Val WMAPE, MAPE, R², Train WMAPE) loaded from `models/xgboost_model.joblib`
-- 30-day forecast with **90% confidence interval bands** (shaded region) overlaid on the last 60 days of actual sales
+- 30-day forecast with **P10–P90 quantile bands** (real quantile-regression bounds — asymmetric, demand-aware) overlaid on the last 60 days of actual sales; falls back to a clearly-labeled heuristic band only if the forecast data lacks quantile columns
 - Forecast by family (color-scaled bar)
 - Forecast by store (color-scaled bar)
 - Feature importance horizontal bar (red = high impact, blue = medium, gray = low)
