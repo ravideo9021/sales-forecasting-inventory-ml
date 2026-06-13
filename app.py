@@ -9,6 +9,7 @@ sparkline KPI cards, cohesive chart palette.
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -215,22 +216,11 @@ label, .stSlider label, .stNumberInput label {{ color:{C['muted']} !important; f
 [data-testid="stToolbar"], [data-testid="stDecoration"], [data-testid="stStatusWidget"] {{ display:none !important; }}
 header[data-testid="stHeader"] {{ background:transparent !important; box-shadow:none !important; }}
 
-/* ── Sidebar open/close controls (Streamlit 1.4x: stExpandSidebarButton /
-   stSidebarCollapseButton). Pin the REOPEN button as a fixed, high-z-index,
-   clearly-styled chip so it can never be overlapped by content or blend into
-   the dark background — this is the control that previously "disappeared". */
-[data-testid="stExpandSidebarButton"], [data-testid="stSidebarCollapseButton"] {{
-    visibility:visible !important; opacity:1 !important; display:inline-flex !important;
-}}
-[data-testid="stExpandSidebarButton"] {{
-    position:fixed !important; top:0.7rem !important; left:0.7rem !important; z-index:1000000 !important;
-    background:{C['surface2']} !important; border:1px solid {C['border_hi']} !important;
-    border-radius:9px !important; padding:6px !important; box-shadow:0 2px 10px rgba(0,0,0,0.4) !important;
-}}
-[data-testid="stExpandSidebarButton"]:hover {{ border-color:{C['accent']} !important; }}
-[data-testid="stExpandSidebarButton"] svg, [data-testid="stExpandSidebarButton"] *,
+/* Keep the in-sidebar collapse control legible (the reopen control is handled
+   by a JS-injected floating button — see _inject_sidebar_opener). */
+[data-testid="stSidebarCollapseButton"] {{ visibility:visible !important; opacity:1 !important; }}
 [data-testid="stSidebarCollapseButton"] svg, [data-testid="stSidebarCollapseButton"] * {{
-    color:{C['text']} !important; fill:{C['text']} !important; opacity:1 !important;
+    color:{C['text']} !important; fill:{C['text']} !important;
 }}
 </style>
 """, unsafe_allow_html=True)
@@ -1127,7 +1117,67 @@ class RetailIQDashboard:
 
     # ── run ──
 
+    def _inject_sidebar_opener(self) -> None:
+        """Inject a self-healing floating button that reopens a collapsed sidebar.
+
+        Streamlit's native expand control proved unreliable when the header is
+        styled (it could render invisibly or off-layout, leaving no way to
+        reopen the sidebar). Instead we add our OWN fixed button into the parent
+        document via a 0-height component iframe (same-origin, so it can reach
+        window.parent). It shows only while the sidebar is collapsed and, on
+        click, programmatically clicks whatever native toggle exists — immune to
+        CSS overlap, colour-blending, and test-id renames.
+        """
+        components.html("""
+        <script>
+        (function () {
+          const doc = window.parent.document;
+          if (window.parent.__riqOpenerTimer) clearInterval(window.parent.__riqOpenerTimer);
+
+          function nativeToggle() {
+            const sels = ['[data-testid="stExpandSidebarButton"]',
+                          '[data-testid="stSidebarCollapseButton"]',
+                          '[data-testid="collapsedControl"]',
+                          '[data-testid="stSidebarCollapsedControl"]'];
+            for (const s of sels) {
+              const el = doc.querySelector(s);
+              if (el) return el.querySelector('button') || el;
+            }
+            return null;
+          }
+          function collapsed() {
+            const sb = doc.querySelector('[data-testid="stSidebar"]');
+            if (!sb) return false;
+            const w = sb.getBoundingClientRect().width;
+            return sb.getAttribute('aria-expanded') === 'false' || w < 40;
+          }
+
+          let btn = doc.getElementById('riq-sidebar-opener');
+          if (!btn) {
+            btn = doc.createElement('button');
+            btn.id = 'riq-sidebar-opener';
+            btn.title = 'Open sidebar';
+            btn.setAttribute('aria-label', 'Open sidebar');
+            btn.innerHTML = '\\u2630';
+            btn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:2147483647;'
+              + 'width:40px;height:40px;border-radius:10px;cursor:pointer;'
+              + 'background:#13141c;color:#f4f4f6;border:1px solid rgba(255,255,255,0.22);'
+              + 'font-size:18px;line-height:1;box-shadow:0 2px 12px rgba(0,0,0,0.55);'
+              + 'align-items:center;justify-content:center;display:none;transition:border-color .15s;';
+            btn.onmouseenter = () => btn.style.borderColor = '#6366f1';
+            btn.onmouseleave = () => btn.style.borderColor = 'rgba(255,255,255,0.22)';
+            btn.onclick = () => { const t = nativeToggle(); if (t) t.click(); };
+            doc.body.appendChild(btn);
+          }
+          function tick() { btn.style.display = collapsed() ? 'flex' : 'none'; }
+          window.parent.__riqOpenerTimer = setInterval(tick, 250);
+          tick();
+        })();
+        </script>
+        """, height=0)
+
     def run(self) -> None:
+        self._inject_sidebar_opener()
         data_all = self._load_all()
         filters = self.render_sidebar(data_all)
         data = self._filter(data_all, filters)
